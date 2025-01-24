@@ -888,11 +888,13 @@ static int linenoiseEdit(char *buf, size_t buflen, const char *prompt)
 }
 
 int linenoiseProbe() {
+    int stdin_fileno = fileno(stdin);
     /* Switch to non-blocking mode */
-    int flags = fcntl(STDIN_FILENO, F_GETFL);
+    int flags = fcntl(stdin_fileno, F_GETFL);
     flags |= O_NONBLOCK;
-    int res = fcntl(STDIN_FILENO, F_SETFL, flags);
+    int res = fcntl(stdin_fileno, F_SETFL, flags);
     if (res != 0) {
+        fprintf(stdout, "erro blk\r\n");
         return -1;
     }
     /* Device status request */
@@ -905,12 +907,14 @@ int linenoiseProbe() {
         usleep(10000);
         char c;
         int cb = fread(&c, 1, 1, stdin);
+        if (cb<0)
+            continue;
         read_bytes += cb;
         timeout_ms--;
     }
     /* Restore old mode */
     flags &= ~O_NONBLOCK;
-    res = fcntl(STDIN_FILENO, F_SETFL, flags);
+    res = fcntl(stdin_fileno, F_SETFL, flags);
     if (res != 0) {
         return -1;
     }
