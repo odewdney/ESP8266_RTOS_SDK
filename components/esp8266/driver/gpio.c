@@ -162,7 +162,7 @@ static esp_err_t gpio_output_disable(gpio_num_t gpio_num)
         CLEAR_PERI_REG_MASK(RTC_GPIO_CONF, 0x1);    //mux configuration for out enable
         CLEAR_PERI_REG_MASK(RTC_GPIO_ENABLE, 0x1);   //out disable
     } else {
-        GPIO.enable_w1tc |= (0x1 << gpio_num);
+        GPIO.enable_w1tc = (0x1 << gpio_num);
     }
 
     return ESP_OK;
@@ -177,13 +177,13 @@ static esp_err_t gpio_output_enable(gpio_num_t gpio_num)
         CLEAR_PERI_REG_MASK(RTC_GPIO_CONF, 0x1);                                                                        //mux configuration for out enable
         SET_PERI_REG_MASK(RTC_GPIO_ENABLE, 0x1);                                                                        //out enable
     } else {
-        GPIO.enable_w1ts |= (0x1 << gpio_num);
+        GPIO.enable_w1ts = (0x1 << gpio_num);
     }
 
     return ESP_OK;
 }
 
-esp_err_t gpio_set_level(gpio_num_t gpio_num, uint32_t level)
+esp_err_t __attribute__((optimize("O3"))) gpio_set_level(gpio_num_t gpio_num, uint32_t level)
 {
     GPIO_CHECK(GPIO_IS_VALID_GPIO(gpio_num), "GPIO number error", ESP_ERR_INVALID_ARG);
 
@@ -195,9 +195,9 @@ esp_err_t gpio_set_level(gpio_num_t gpio_num, uint32_t level)
         }
     } else {
         if (level) {
-            GPIO.out_w1ts |= (0x1 << gpio_num);
+            GPIO.out_w1ts = (0x1 << gpio_num);
         } else {
-            GPIO.out_w1tc |= (0x1 << gpio_num);
+            GPIO.out_w1tc = (0x1 << gpio_num);
         }
     }
 
@@ -285,9 +285,8 @@ esp_err_t gpio_config(const gpio_config_t *gpio_cfg)
     }
 
     do {
-        io_reg = GPIO_PIN_REG(io_num);
-
         if (((gpio_pin_mask >> io_num) & BIT(0))) {
+            io_reg = GPIO_PIN_REG(io_num);
             if (!io_reg) {
                 ESP_LOGE(GPIO_TAG, "IO%d is not a valid GPIO", io_num);
                 return ESP_ERR_INVALID_ARG;
@@ -329,11 +328,14 @@ esp_err_t gpio_config(const gpio_config_t *gpio_cfg)
                 gpio_set_intr_type(io_num, gpio_cfg->intr_type);
             }
 
-            pin_reg.val = READ_PERI_REG(GPIO_PIN_REG(io_num));
+            pin_reg.val = READ_PERI_REG(io_reg);
 
             // It should be noted that GPIO0, 2, 4, and 5 need to set the func register to 0,
             // and the other GPIO needs to be set to 3 so that IO can be GPIO function.
             if ((0x1 << io_num) & (GPIO_Pin_0 | GPIO_Pin_2 | GPIO_Pin_4 | GPIO_Pin_5)) {
+                pin_reg.func_low_bit = 0;
+                pin_reg.func_high_bit = 0;
+            } else if (RTC_GPIO_IS_VALID_GPIO(io_num)) {
                 pin_reg.rtc_pin.func_low_bit = 0;
                 pin_reg.rtc_pin.func_high_bit = 0;
             } else {
@@ -341,7 +343,7 @@ esp_err_t gpio_config(const gpio_config_t *gpio_cfg)
                 pin_reg.func_high_bit = 0;
             }
 
-            WRITE_PERI_REG(GPIO_PIN_REG(io_num), pin_reg.val);
+            WRITE_PERI_REG(io_reg, pin_reg.val);
         }
 
         io_num++;
@@ -350,27 +352,29 @@ esp_err_t gpio_config(const gpio_config_t *gpio_cfg)
     return ESP_OK;
 }
 
-void IRAM_ATTR gpio_intr_service(void *arg)
+void IRAM_ATTR __attribute__((optimize("O3"))) gpio_intr_service(void *arg)
 {
-    //GPIO intr process
-    uint32_t gpio_num = 0;
     //read status to get interrupt status for GPIO0-15
-    uint32_t gpio_intr_status = GPIO.status;
+    uint32_t gpio_intr_status = GPIO.status & 0xffff;
 
     if (gpio_isr_func == NULL) {
+        // clear all
+        GPIO.status_w1tc = gpio_intr_status;
         return;
     }
 
-    do {
-        if (gpio_num < GPIO_PIN_COUNT - 1) {
-            if (gpio_intr_status & BIT(gpio_num)) { //gpio0-gpio15
-                GPIO.status_w1tc = BIT(gpio_num);
-                if (gpio_isr_func[gpio_num].fn != NULL) {
-                    gpio_isr_func[gpio_num].fn(gpio_isr_func[gpio_num].args);
-                }
-            }
+    while(gpio_intr_status) {
+        uint32_t gpio_num = __builtin_ffs(gpio_intr_status);
+        if (gpio_num == 0)
+            break;
+        
+        gpio_num--;
+        GPIO.status_w1tc = BIT(gpio_num);
+        gpio_intr_status ^= BIT(gpio_num);
+        if (gpio_isr_func[gpio_num].fn != NULL) {
+            gpio_isr_func[gpio_num].fn(gpio_isr_func[gpio_num].args);
         }
-    } while (++gpio_num < GPIO_PIN_COUNT - 1);
+    }
 }
 
 esp_err_t gpio_isr_handler_add(gpio_num_t gpio_num, gpio_isr_t isr_handler, void *args)

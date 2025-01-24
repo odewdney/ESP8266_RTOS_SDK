@@ -353,26 +353,33 @@ void _xt_isr_attach(uint8_t i, _xt_isr func, void* arg)
     s_isr[i].arg = arg;
 }
 
-void IRAM_ATTR _xt_isr_handler(void)
+void IRAM_ATTR __attribute__((optimize("O3"))) _xt_isr_handler(void)
 {
     do {
         uint32_t mask = soc_get_int_mask();
+        if(mask==0)
+            break;
 
-        for (int i = 0; i < ETS_INT_MAX && mask; i++) {
+        do
+        {
+            int i = __builtin_ffs(mask);
+            if (i==0)
+                break;
+
+            i--;
             int bit = 1 << i;
 
-            if (!(bit & mask) || !s_isr[i].handler)
-                continue;
-
             soc_clear_int_mask(bit);
+            mask &= ~bit;
 
             s_xt_isr_status = 1;
-            s_isr[i].handler(s_isr[i].arg);
-            s_xt_isr_status = 0;
+            if(s_isr[i].handler != NULL) {
+                s_isr[i].handler(s_isr[i].arg);
+            }
 
-            mask &= ~bit;
-        }
-    } while (soc_get_int_mask());
+            s_xt_isr_status = 0;
+        } while(true);
+    } while (true);
 
     if (s_switch_ctx_flag) {
         vTaskSwitchContext();

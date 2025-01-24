@@ -91,13 +91,13 @@ static void inline ir_tx_gen_carrier()
 {
     switch (ir_tx_obj->io_num) {
         case 2: {
-            GPIO.out_w1ts |= 0x4; // GPIO 2
+            GPIO.out_w1ts = 0x4; // GPIO 2
             PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, FUNC_I2SO_WS);
         }
         break;
 
         case 14: {
-            GPIO.out_w1ts |= 0x4000; // GPIO 14
+            GPIO.out_w1ts = 0x4000; // GPIO 14
             PIN_FUNC_SELECT(PERIPHS_IO_MUX_MTMS_U, FUNC_I2SI_WS);
         }
         break;
