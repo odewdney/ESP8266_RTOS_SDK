@@ -5,6 +5,9 @@
 #include "esp_log.h"
 #include "esp_transport.h"
 #include "esp_transport_tcp.h"
+
+#ifdef TRANSPORT_WS
+
 #include "esp_transport_ws.h"
 #include "esp_transport_utils.h"
 #include "mbedtls/base64.h"
@@ -548,4 +551,4 @@ int esp_transport_ws_get_read_payload_len(esp_transport_handle_t t)
     return ws->frame_state.payload_len;
 }
 
-
+#endif

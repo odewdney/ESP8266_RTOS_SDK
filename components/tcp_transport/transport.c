@@ -15,7 +15,10 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef TRANSPORT_TLS
 #include <esp_tls.h>
+#endif
 
 #include "sys/queue.h"
 #include "esp_log.h"
@@ -43,8 +46,9 @@ struct esp_transport_item_t {
     trans_func      _destroy;       /*!< Destroy and free transport */
     connect_async_func _connect_async;      /*!< non-blocking connect function of this transport */
     payload_transfer_func  _parent_transfer;        /*!< Function returning underlying transport layer */
+#ifdef TRANSPORT_TLS
     esp_tls_error_handle_t     error_handle;            /*!< Pointer to esp-tls error handle */
-
+#endif
     STAILQ_ENTRY(esp_transport_item_t) next;
 };
 
@@ -59,7 +63,9 @@ STAILQ_HEAD(esp_transport_list_t, esp_transport_item_t);
  */
 typedef struct esp_transport_internal {
     struct esp_transport_list_t list;                      /*!< List of transports */
+#ifdef TRANSPORT_TLS
     esp_tls_error_handle_t  error_handle;                               /*!< Pointer to the error tracker if enabled  */
+#endif
 } esp_transport_internal_t;
 
 static esp_transport_handle_t esp_transport_get_default_parent(esp_transport_handle_t t)
@@ -75,7 +81,9 @@ esp_transport_list_handle_t esp_transport_list_init(void)
     esp_transport_list_handle_t transport = calloc(1, sizeof(esp_transport_internal_t));
     ESP_TRANSPORT_MEM_CHECK(TAG, transport, return NULL);
     STAILQ_INIT(&transport->list);
+#ifdef TRANSPORT_TLS
     transport->error_handle = calloc(1, sizeof(esp_tls_last_error_t));
+#endif
     return transport;
 }
 
@@ -88,8 +96,10 @@ esp_err_t esp_transport_list_add(esp_transport_list_handle_t h, esp_transport_ha
     ESP_TRANSPORT_MEM_CHECK(TAG, t->scheme, return ESP_ERR_NO_MEM);
     strcpy(t->scheme, scheme);
     STAILQ_INSERT_TAIL(&h->list, t, next);
+#ifdef TRANSPORT_TLS
     // Each transport in a list to share the same error tracker
     t->error_handle = h->error_handle;
+#endif
     return ESP_OK;
 }
 
@@ -113,7 +123,9 @@ esp_transport_handle_t esp_transport_list_get_transport(esp_transport_list_handl
 esp_err_t esp_transport_list_destroy(esp_transport_list_handle_t h)
 {
     esp_transport_list_clean(h);
+#ifdef TRANSPORT_TLS
     free(h->error_handle);
+#endif
     free(h);
     return ESP_OK;
 }
@@ -292,6 +304,8 @@ esp_err_t esp_transport_set_parent_transport_func(esp_transport_handle_t t, payl
     return ESP_OK;
 }
 
+#ifdef TRANSPORT_TLS
+
 esp_tls_error_handle_t esp_transport_get_error_handle(esp_transport_handle_t t)
 {
     if (t) {
@@ -306,3 +320,4 @@ void esp_transport_set_errors(esp_transport_handle_t t, const esp_tls_error_hand
         memcpy(t->error_handle, error_handle, sizeof(esp_tls_last_error_t));
     }
 }
+#endif

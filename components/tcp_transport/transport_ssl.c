@@ -17,11 +17,14 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_tls.h"
 #include "esp_log.h"
 #include "esp_system.h"
 
 #include "esp_transport.h"
+
+#ifdef TRANSPORT_TLS
+#include "esp_tls.h"
+
 #include "esp_transport_ssl.h"
 #include "esp_transport_utils.h"
 #include "esp_transport_ssl_internal.h"
@@ -290,3 +293,4 @@ esp_transport_handle_t esp_transport_ssl_init(void)
     return t;
 }
 
+#endif
